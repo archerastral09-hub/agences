@@ -1,0 +1,56 @@
+name: Enrichir agences (infonet)
+
+on:
+  workflow_dispatch:
+    inputs:
+      departement:
+        description: "Vide = tous / 75 / 01,02,75"
+        required: false
+        default: ""
+      limite:
+        description: "Nombre max de fiches (0 = toutes)"
+        required: false
+        default: "0"
+      navigateur:
+        description: "Rendu JavaScript via Playwright (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: infonet
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer les dépendances
+        run: pip install requests beautifulsoup4
+      - name: Installer Chromium (si rendu JavaScript)
+        if: ${{ github.event.inputs.navigateur == 'true' }}
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+      - name: Configurer git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Scraper (commit + push régulier, arrêt propre avant la limite de 6 h)
+        env:
+          DEP: ${{ github.event.inputs.departement }}
+          LIMITE: ${{ github.event.inputs.limite }}
+          NAV: ${{ github.event.inputs.navigateur }}
+        run: |
+          args=(--push --push-tous 100 --duree-max 340)
+          [ -n "$DEP" ] && args+=(--dep "$DEP")
+          [ "${LIMITE:-0}" != "0" ] && args+=(--limit "$LIMITE")
+          [ "$NAV" = "true" ] && args+=(--navigateur)
+          python scrape_infonet.py "${args[@]}"
