@@ -1,0 +1,44 @@
+name: Récupérer agences Sirene
+
+on:
+  workflow_dispatch:
+    inputs:
+      departement:
+        description: "all (101 départements) / 75 / 01,02,75 / depuis:40"
+        required: true
+        default: "all"
+      force:
+        description: "Refaire les départements déjà présents (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sirene
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Configurer git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Récupérer les agences (commit + push après chaque département)
+        env:
+          DEP: ${{ github.event.inputs.departement }}
+          FORCE: ${{ github.event.inputs.force }}
+        run: |
+          if [ "$FORCE" = "true" ]; then
+            python fetch_sirene.py "$DEP" --push --force
+          else
+            python fetch_sirene.py "$DEP" --push
+          fi
