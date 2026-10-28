@@ -1,0 +1,47 @@
+name: Récupération des SIREN Orpi
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Limiter à N agences (0 = toutes, utile pour tester)"
+        default: "0"
+      workers:
+        description: "Requêtes en parallèle"
+        default: "4"
+
+jobs:
+  siren:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # reprise possible : le cache JSON est conservé entre les runs
+      - uses: actions/cache@v4
+        with:
+          path: siren_cache.json
+          key: siren-cache-${{ github.run_id }}
+          restore-keys: siren-cache-
+
+      - name: Récupérer les SIREN
+        run: |
+          python recup_siren.py data/agences_orpi.xlsx \
+            -o agences_orpi_siren.xlsx \
+            --limit "${{ inputs.limit }}" \
+            --workers "${{ inputs.workers }}"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agences_orpi_siren
+          path: |
+            agences_orpi_siren.xlsx
+            siren_cache.json
