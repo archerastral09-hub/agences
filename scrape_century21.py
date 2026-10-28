@@ -168,27 +168,47 @@ def resolve_email(raw_ocr: str, img_url: str):
     return "", ""
 
 
-def extract_email(soup, base_url, session):
-    """Retourne (email, source, ocr_brut)."""
-    # 1) email en clair (mailto ou texte)
-    for a in soup.select('a[href^="mailto:"]'):
-        mail = a["href"][7:].split("?")[0].strip()
-        if EMAIL_RE.fullmatch(mail):
-            return mail.lower(), "texte", ""
+# emails qui ne sont PAS ceux de l'agence (médiateur de la consommation, etc.)
+EXCLUDED_DOMAINS = {"medimmoconso.fr"}
+
+
+def is_excluded(mail: str) -> bool:
+    return mail.lower().split("@")[-1] in EXCLUDED_DOMAINS
+
+
+def find_email_block(soup):
+    """Le <p> dont le libellé « Adresse mail » précède l'email de l'agence."""
     for p in soup.find_all("p"):
-        if "adresse mail" in p.get_text(" ", strip=True).lower():
-            m = EMAIL_RE.search(p.get_text(" ", strip=True))
-            if m:
-                return m.group(0).lower(), "texte", ""
-            # 2) email en image -> OCR
-            img = p.find("img")
-            if img and img.get("src"):
-                img_url = urljoin(base_url, img["src"])
-                r = session.get(img_url, timeout=30)
-                r.raise_for_status()
-                raw = ocr_image(r.content)
-                email, source = resolve_email(raw, img_url)
-                return email, source, raw
+        label = p.find("strong")
+        if label and "adresse mail" in label.get_text(" ", strip=True).lower():
+            return p
+    return None
+
+
+def extract_email(soup, base_url, session):
+    """Retourne (email, source, ocr_brut). Ne lit QUE le bloc « Adresse mail »."""
+    p = find_email_block(soup)
+    if p is None:
+        return "", "", ""
+    # 1) email en clair dans le bloc (mailto ou texte)
+    for a in p.select('a[href^="mailto:"]'):
+        mail = a["href"][7:].split("?")[0].strip()
+        if EMAIL_RE.fullmatch(mail) and not is_excluded(mail):
+            return mail.lower(), "texte", ""
+    m = EMAIL_RE.search(p.get_text(" ", strip=True))
+    if m and not is_excluded(m.group(0)):
+        return m.group(0).lower(), "texte", ""
+    # 2) email en image -> OCR
+    img = p.find("img")
+    if img and img.get("src"):
+        img_url = urljoin(base_url, img["src"])
+        r = session.get(img_url, timeout=30)
+        r.raise_for_status()
+        raw = ocr_image(r.content)
+        email, source = resolve_email(raw, img_url)
+        if email and is_excluded(email):
+            return "", "", raw
+        return email, source, raw
     return "", "", ""
 
 
@@ -384,3 +404,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+  
