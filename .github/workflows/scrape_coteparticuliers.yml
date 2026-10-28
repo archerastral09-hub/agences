@@ -1,0 +1,55 @@
+name: Côté Particuliers - SIREN / SIRET
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Nombre d'agences à traiter (0 = toutes)"
+        required: false
+        default: "0"
+      workers:
+        description: "Threads pour les pages mentions légales"
+        required: false
+        default: "6"
+      min_score:
+        description: "Score minimum pour accepter un candidat API"
+        required: false
+        default: "5"
+
+permissions:
+  contents: read
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install openpyxl requests beautifulsoup4
+
+      - name: Run script
+        run: |
+          python -u scrape_coteparticuliers.py \
+            --input agences_coteparticuliers.xlsx \
+            --output output/agences_coteparticuliers_complete.xlsx \
+            --limit "${{ github.event.inputs.limit || '0' }}" \
+            --workers "${{ github.event.inputs.workers || '6' }}" \
+            --min-score "${{ github.event.inputs.min_score || '5' }}"
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agences_coteparticuliers_complete
+          path: output/agences_coteparticuliers_complete.xlsx
+          if-no-files-found: warn
