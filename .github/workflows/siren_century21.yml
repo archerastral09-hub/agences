@@ -1,0 +1,48 @@
+name: Récupération des SIREN Century 21
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Limiter à N agences (0 = toutes, utile pour tester)"
+        default: "0"
+      workers:
+        description: "Requêtes en parallèle"
+        default: "4"
+
+jobs:
+  siren:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # reprise possible : le cache JSON est conservé entre les runs
+      - uses: actions/cache@v4
+        with:
+          path: siren_cache_century21.json
+          key: siren-cache-century21-${{ github.run_id }}
+          restore-keys: siren-cache-century21-
+
+      - name: Récupérer les SIREN
+        run: |
+          python recup_siren_century21.py data/agences_century21.xlsx \
+            -o agences_century21_siren.xlsx \
+            --cache siren_cache_century21.json \
+            --limit "${{ inputs.limit }}" \
+            --workers "${{ inputs.workers }}"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agences_century21_siren
+          path: |
+            agences_century21_siren.xlsx
+            siren_cache_century21.json
